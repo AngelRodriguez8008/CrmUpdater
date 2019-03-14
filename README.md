@@ -4,7 +4,7 @@ Microsoft Dynamics Crm Web Resources Updater gives you an easy way to update and
 
 ### Credits
 
-  + Marat.V.Deykun - [Blog](http://happycrm.blogspot.com/p/crm-publisher.html)
+  + Marat Deykun - [Blog](http://happycrm.blogspot.com/p/crm-publisher.html)
 	+ Base code: https://archive.codeplex.com/?p=crmupdater
     + Base Installer & Documentation: [Visual Studio Gallery](https://marketplace.visualstudio.com/items?itemName=MaratVDeykun.MicrosoftDynamicsCRMWebResourcesUpdater)
   + My Additions:
@@ -41,8 +41,7 @@ Examples:
 ### Changes
 
 #### _v0.5.35.6 (2019-03-14)_
-+ Upgrage Package References
 + Add/Update JavaScript File Version on file upload	
 + Update CRM Solution Version on file upload
-
++ Upgrade Package References
 
