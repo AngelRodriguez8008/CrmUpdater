@@ -46,7 +46,7 @@ namespace CrmWebResourcesUpdater
 
         public static string GenerateJsVersion(DateTime now)
         {
-            string dateTimeStr = $"{now:yyyy-MM-dd hh:mm}";
+            string dateTimeStr = $"{now:yyyy-MM-dd HH:mm}";
             string lineToWrite = JsVersionTemplate + dateTimeStr;
             return lineToWrite;
         }
