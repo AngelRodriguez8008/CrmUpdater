@@ -48,7 +48,7 @@ namespace CrmWebResourcesUpdater
 
             var extendedLog = false;
             var settings = ProjectHelper.GetSettings();
-            if(settings!= null && settings.CrmConnections != null)
+            if(settings?.CrmConnections != null)
             {
                 extendedLog = settings.CrmConnections.ExtendedLog;
             }
