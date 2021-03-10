@@ -39,7 +39,7 @@ Examples:
 
 		
 ### Changes
-#### _v0.5.35.8 (2021-03-14)_
+#### _v0.5.35.8 (2021-03-10)_
 + Add Visual Studio 2019 compatibility
 #### _v0.5.35.6 (2019-03-14)_
 + Add/Update JavaScript File Version on file upload	
