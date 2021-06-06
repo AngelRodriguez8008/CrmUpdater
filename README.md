@@ -39,6 +39,8 @@ Examples:
 
 		
 ### Changes
+#### _v0.5.40.1 (2021-06-06)_
++ Updating the Connnection Control from McTools (some connections types are not working - use SDK Dialog)
 #### _v0.5.35.8 (2021-03-10)_
 + Add Visual Studio 2019 compatibility
 #### _v0.5.35.6 (2019-03-14)_
