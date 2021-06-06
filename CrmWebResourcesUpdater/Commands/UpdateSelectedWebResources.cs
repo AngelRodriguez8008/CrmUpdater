@@ -1,9 +1,7 @@
 ﻿using System;
 using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell;
-using System.Windows.Forms;
 using CrmWebResourcesUpdater.Common;
-using CrmWebResourcesUpdater.Helpers;
 
 namespace CrmWebResourcesUpdater
 {
@@ -29,12 +27,7 @@ namespace CrmWebResourcesUpdater
         /// <param name="package">Owner package, not null.</param>
         private UpdateSelectedWebResources(Package package)
         {
-            if (package == null)
-            {
-                throw new ArgumentNullException("package");
-            }
-
-            this.package = package;
+            this.package = package ?? throw new ArgumentNullException(nameof(package));
 
             OleMenuCommandService commandService = ServiceProvider.GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
             if (commandService != null)
@@ -77,35 +70,9 @@ namespace CrmWebResourcesUpdater
         /// <param name="e">Event args.</param>
         private void MenuItemCallback(object sender, EventArgs e)
         {
-            var settings = ProjectHelper.GetSettings();
-            var result = DialogResult.Cancel;
-            var project = ProjectHelper.GetSelectedProject();
-
-            if (settings.SelectedConnection == null)
+            using (var publisher = new Publisher())
             {
-
-                if (ProjectHelper.ShowErrorDialog() == DialogResult.Yes)
-                {
-                    result = Publisher.ShowConfigurationDialog(ConfigurationMode.Update, project);
-                    if (result != DialogResult.Yes)
-                    {
-                        return;
-                    }
-                }
-                else
-                {
-                    return;
-                }
-            }
-            if (settings.SelectedConnection == null)
-            {
-                Logger.WriteLine("Error: Connection is not selected");
-                return;
-            }
-
-            using (var publisher = new Publisher(settings.SelectedConnection, true, settings.CrmConnections.PublishAfterUpload, settings.CrmConnections.IgnoreExtensions, settings.CrmConnections.ExtendedLog))
-            {
-                publisher.PublishWebResourcesAsync();
+                publisher.PublishWebResources(true);
             }
         }
     }

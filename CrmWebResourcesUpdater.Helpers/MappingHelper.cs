@@ -9,6 +9,8 @@ namespace CrmWebResourcesUpdater.Helpers
 {
     public static class MappingHelper
     {
+        public const string MappingFileName = "UploaderMapping.config";
+
         public static Dictionary<string, string> LoadMappings(Project project)
         {
             var mappingFilePath = GetMappingFilePath(project);
@@ -53,19 +55,24 @@ namespace CrmWebResourcesUpdater.Helpers
                 {
                     throw new ArgumentException($"Project contains dublicate(s) for mapped web resource \"{webResourceName}\"");
                 }
-
             }
             return mappingList;
         }
 
-        public static void CreateMapping(Project project, string filePath, string webresourceName)
+        public static void CreateMapping(string filePath, string webresourceName, Project project = null)
         {
+            project = project ?? ProjectHelper.GetSelectedProject();
+            if (project == null)
+                return;
+
             var mappingFilePath = GetMappingFilePath(project) ?? CreateMappingFile(project);
+            if (mappingFilePath == null)
+                return;
 
             var projectRootPath = ProjectHelper.GetProjectRoot(project) + "\\";
             var scriptShortPath = filePath.Replace(projectRootPath, "");
-
-            XDocument doc = XDocument.Load(mappingFilePath);
+            
+            var doc = XDocument.Load(mappingFilePath);
             var mapping = new XElement("Mapping");
             mapping.SetAttributeValue("localPath", scriptShortPath);
             mapping.SetAttributeValue("webResourceName", webresourceName);
@@ -101,10 +108,17 @@ namespace CrmWebResourcesUpdater.Helpers
             return true;
         }
 
+        public static string CreateMappingFile()
+            => CreateMappingFile(ProjectHelper.GetSelectedProject());
+
         public static string CreateMappingFile(Project project)
         {
+            project = project ?? ProjectHelper.GetSelectedProject();
+            if(project == null)
+                return null;
+
             var projectPath = ProjectHelper.GetProjectRoot(project);
-            var filePath = projectPath + "\\UploaderMapping.config";
+            var filePath = $"{projectPath}\\{MappingFileName}";
             if (File.Exists(filePath))
             {
                 var path = GetMappingFilePath(project);
@@ -114,7 +128,7 @@ namespace CrmWebResourcesUpdater.Helpers
                 }
                 return filePath;
             }
-            var writer = File.CreateText(projectPath + "\\UploaderMapping.config");
+            var writer = File.CreateText(filePath);
             writer.WriteLine("<?xml version=\"1.0\" encoding=\"utf-8\" ?>");
             writer.WriteLine("<Mappings  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"	xsi:noNamespaceSchemaLocation=\"http://exitoconsulting.ru/schema/CrmWebResourcesUpdater/MappingSchema.xsd\">");
             writer.WriteLine("<!--");
@@ -128,22 +142,15 @@ namespace CrmWebResourcesUpdater.Helpers
             project.ProjectItems.AddFromFile(filePath);
             return filePath;
         }
-
+        
         public static string GetMappingFilePath(Project project)
         {
             var projectFiles = ProjectHelper.GetProjectFiles(project.ProjectItems);
             if (projectFiles == null || projectFiles.Count == 0)
-            {
                 return null;
-            }
-            foreach (var file in projectFiles)
-            {
-                if (string.Equals(Path.GetFileName(file), Settings.MappingFileName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return file.ToLower();
-                }
-            }
-            return null;
+
+            var result = projectFiles.FirstOrDefault(file => string.Equals(Path.GetFileName(file), MappingFileName, StringComparison.OrdinalIgnoreCase));
+            return result?.ToLower();
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell;
 using CrmWebResourcesUpdater.Helpers;
 using CrmWebResourcesUpdater.Common;
+using CrmWebResourcesUpdater.OptionsForms;
 using Microsoft.VisualStudio.Shell.Interop;
 
 namespace CrmWebResourcesUpdater
@@ -10,11 +11,13 @@ namespace CrmWebResourcesUpdater
     /// <summary>
     /// CrmWebResourceUpdater extension package class
     /// </summary>
-    [PackageRegistration(UseManagedResourcesOnly = true)]
+    [PackageRegistration(UseManagedResourcesOnly = true,SatellitePath ="")]
+    [ProvideBindingPath]
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [Guid(ProjectGuids.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+
     public sealed class CrmWebResourcesUpdater : Package
     {
         EnvDTE80.DTE2 dte;
@@ -47,10 +50,10 @@ namespace CrmWebResourcesUpdater
             dte = GetService(typeof(SDTE)) as EnvDTE80.DTE2;
 
             var extendedLog = false;
-            var settings = ProjectHelper.GetSettings();
-            if(settings?.CrmConnections != null)
+            var settings = ProjectHelper.GetSettings<Settings>();
+            if(settings != null)
             {
-                extendedLog = settings.CrmConnections.ExtendedLog;
+                extendedLog = settings.ExtendedLog;
             }
 
             if (dte == null) // The IDE is not yet fully initialized

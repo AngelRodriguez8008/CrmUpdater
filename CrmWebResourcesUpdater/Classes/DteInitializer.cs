@@ -23,25 +23,22 @@ namespace CrmWebResourcesUpdater
 
         int IVsShellPropertyEvents.OnShellPropertyChange(int propid, object var)
         {
-            int hr;
-            bool isZombie;
+            if (propid != (int) __VSSPROPID.VSSPROPID_Zombie)
+                return VSConstants.S_OK;
 
-            if (propid == (int)__VSSPROPID.VSSPROPID_Zombie)
-            {
-                isZombie = (bool)var;
+            var isZombie = (bool)var;
 
-                if (!isZombie)
-                {
-                    // Release the event handler to detect when the IDE is fully initialized
-                    hr = _shellService.UnadviseShellPropertyChanges(_cookie);
+            if (isZombie)
+                return VSConstants.S_OK;
 
-                    ErrorHandler.ThrowOnFailure(hr);
+            // Release the event handler to detect when the IDE is fully initialized
+            var hr = _shellService.UnadviseShellPropertyChanges(_cookie);
 
-                    _cookie = 0;
+            ErrorHandler.ThrowOnFailure(hr);
 
-                    _callback();
-                }
-            }
+            _cookie = 0;
+
+            _callback();
             return VSConstants.S_OK;
         }
     }

@@ -2,7 +2,6 @@
 using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell;
 using CrmWebResourcesUpdater.Common;
-using CrmWebResourcesUpdater.Helpers;
 
 namespace CrmWebResourcesUpdater
 {
@@ -28,12 +27,7 @@ namespace CrmWebResourcesUpdater
         /// <param name="package">Owner package, not null.</param>
         private UpdaterOptions(Package package)
         {
-            if (package == null)
-            {
-                throw new ArgumentNullException("package");
-            }
-
-            this.package = package;
+            this.package = package ?? throw new ArgumentNullException(nameof(package));
 
             OleMenuCommandService commandService = ServiceProvider.GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
             if (commandService != null)
@@ -76,8 +70,10 @@ namespace CrmWebResourcesUpdater
         /// <param name="e">Event args.</param>
         private void MenuItemCallback(object sender, EventArgs e)
         {
-            var project = ProjectHelper.GetSelectedProject();
-            Publisher.ShowConfigurationDialog(ConfigurationMode.Normal, project);
+            using (var publisher = new Publisher())
+            {
+               publisher.ShowConfigurationDialog();
+            }
         }
     }
 }

@@ -1,5 +1,4 @@
-﻿using McTools.Xrm.Connection;
-using Microsoft.Xrm.Sdk;
+﻿using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using System;
@@ -10,41 +9,38 @@ using System.Windows.Forms;
 using System.IO;
 using CrmWebResourcesUpdater.Helpers;
 using CrmWebResourcesUpdater.Common;
+using CrmWebResourcesUpdater.OptionsForms;
 
 namespace CrmWebResourcesUpdater.Forms
 {
     public partial class CreateWebResourceForm : Form
     {
-        public Entity WebResource { get; set; }
-        public string ProjectItemPath {get; set;}
-        private IOrganizationService _service;
-        private ConnectionDetail _connectionDetail;
 
-        private const string FileKindGuid = "{6BB5F8EE-4483-11D3-8BCF-00C04F8EC28C}";
-        private const string MappingFileName = "UploaderMapping.config";
+        public string ProjectItemPath { get; set; }
+        private readonly IOrganizationService service;
+        private readonly Settings settings;
 
-
-        public CreateWebResourceForm(string filePath)
+        public CreateWebResourceForm(IOrganizationService service, string filePath)
         {
-            var settings = ProjectHelper.GetSettings();
-            _connectionDetail = settings.SelectedConnection;
-            if (_connectionDetail.SolutionId == null)
+            settings = ProjectHelper.GetSettings<Settings>();
+            if (settings.Solution.SolutionId == null)
             {
                 throw new ArgumentNullException("SolutionId");
             }
-            WebRequest.GetSystemWebProxy();
-            _service = CrmConnectionHelper.GetOrganizationServiceProxy(_connectionDetail);
+
+            WebRequest.GetSystemWebProxy();  // Todo: require this?
+            this.service = service;
 
             ProjectItemPath = filePath;
             InitializeComponent();
         }
 
-        private void bCreateClick(object sender, EventArgs e)
+        private void bCreate_Click(object sender, EventArgs e)
         {
             var name = tbName.Text;
-            if(string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(name))
             {
-                MessageBox.Show("Name can not be empty", "Error",MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Name can not be empty", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -63,18 +59,20 @@ namespace CrmWebResourcesUpdater.Forms
 
             var webresourceName = prefix + "_" + name;
 
-            WebResource = new Entity();
+            var webResource = new Entity
+            {
+                ["name"] = webresourceName,
+                ["displayname"] = tbDisplayName.Text,
+                ["description"] = tbDescription.Text,
+                ["content"] = ProjectHelper.GetEncodedFileContent(ProjectItemPath),
+                ["webresourcetype"] = new OptionSetValue(cbType.SelectedIndex + 1),
+                LogicalName = "webresource"
+            };
 
-            WebResource["name"] = webresourceName;
-            WebResource["displayname"] = tbDisplayName.Text;
-            WebResource["description"] = tbDescription.Text;
-            WebResource["content"] = ProjectHelper.GetEncodedFileContent(ProjectItemPath);
-            WebResource["webresourcetype"] = new OptionSetValue(cbType.SelectedIndex + 1);
-            WebResource.LogicalName = "webresource";
 
             Cursor.Current = Cursors.WaitCursor;
             var project = ProjectHelper.GetSelectedProject();
-            if (isResourceExists(webresourceName))
+            if (IsResourceExists(webresourceName))
             {
                 MessageBox.Show("Webresource with name '" + webresourceName + "' already exist in CRM.", "Webresource already exists.", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -93,20 +91,20 @@ namespace CrmWebResourcesUpdater.Forms
                                     "Unfortunately the file \"UploaderMapping.config\" is read-only (file might be under a source control), so mapping record cant be created. \r\n\r\n" +
                                     "Press OK to proceed without mapping record creation (You have to do that manually later). Press Cancel to fix problem and try later.";
                     var result = MessageBox.Show(message, "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
-                    if(result == DialogResult.Cancel)
+                    if (result == DialogResult.Cancel)
                     {
                         return;
                     }
                 }
                 if (isMappingRequired && !isMappingFileReadOnly)
                 {
-                    MappingHelper.CreateMapping(project, ProjectItemPath, webresourceName);
+                    MappingHelper.CreateMapping(ProjectItemPath, webresourceName, project);
                 }
-                CreateWebResource(WebResource);
+                CreateWebResource(webResource);
                 Logger.WriteLine("Webresource '" + webresourceName + "' was successfully created");
                 Close();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Cursor.Current = Cursors.Arrow;
                 MessageBox.Show("An error occured during web resource creation: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -119,81 +117,58 @@ namespace CrmWebResourcesUpdater.Forms
             {
                 throw new ArgumentNullException("Web resource can not be null");
             }
-            CreateRequest createRequest = new CreateRequest
+            var createRequest = new CreateRequest
             {
                 Target = webResource
             };
-            createRequest.Parameters.Add("SolutionUniqueName", _connectionDetail.Solution);
-            _service.Execute(createRequest);
+            createRequest.Parameters.Add("SolutionUniqueName", settings.Solution.UniqueName);
+            service.Execute(createRequest);
         }
 
-        private bool isResourceExists(string webResourceName)
+        private bool IsResourceExists(string webResourceName)
         {
-            QueryExpression query = new QueryExpression
+            var query = new QueryExpression
             {
                 EntityName = "webresource",
-                ColumnSet = new ColumnSet(new string[] { "name" }),
-                Criteria = new FilterExpression()
+                ColumnSet = new ColumnSet("name")
             };
             query.Criteria.AddCondition("name", ConditionOperator.Equal, webResourceName);
-            //query.Criteria.AddCondition("solutionid", ConditionOperator.Equal, _connectionDetail.SolutionId);
 
-            var response = _service.RetrieveMultiple(query);
+            var response = service.RetrieveMultiple(query);
             var entity = response.Entities.FirstOrDefault();
 
-            return entity == null ? false : true;
-        }
-
-        
-
-        private void bCancelClick(object sender, EventArgs e)
-        {
-            DialogResult = DialogResult.Cancel;
-            Close();
+            return entity != null;
         }
 
         private void CreateWebResourceFormLoad(object sender, EventArgs e)
         {
-            var prefix = _connectionDetail.PublisherPrefix == null ? "" : _connectionDetail.PublisherPrefix;
+            var prefix = settings.Solution.PublisherPrefix ?? "";
             var name = Path.GetFileName(ProjectItemPath);
-            var extension = Path.GetExtension(ProjectItemPath).ToLower();
+            var extension = Path.GetExtension(ProjectItemPath);
+            extension = extension?.Substring(1);
 
             var re = new Regex("^" + prefix + "_");
             name = re.Replace(name, "");
-            
 
             tbPrefix.Text = prefix;
             tbName.Text = name;
-            tbDisplayName.Text = prefix + "_" + name;
+            tbDisplayName.Text = $@"{prefix}_{name}";
             tbDescription.Text = "";
 
-            cbType.Items.Add("Webpage (HTML)");
-            cbType.Items.Add("Stylesheet (CSS)");
-            cbType.Items.Add("Script (JScript)");
-            cbType.Items.Add("Data (XML)");
-            cbType.Items.Add("Image (PNG)");
-            cbType.Items.Add("Image (JPG)");
-            cbType.Items.Add("Image (GIF)");
-            cbType.Items.Add("Silverlight (XAP)");
-            cbType.Items.Add("Stylesheet (XSL)");
-            cbType.Items.Add("Image (ICO)");
-            switch(extension)
-            {
-                case ".htm":
-                case ".html": { cbType.SelectedIndex = 0; break; }
-                case ".css": { cbType.SelectedIndex = 1; break; }
-                case ".js": { cbType.SelectedIndex = 2; break; }
-                case ".xml": { cbType.SelectedIndex = 3; break; }
-                case ".png": { cbType.SelectedIndex = 4; break; }
-                case ".jpg":
-                case ".jpeg": { cbType.SelectedIndex = 5; break; }
-                case ".gif": { cbType.SelectedIndex = 6; break; }
-                case ".xap": { cbType.SelectedIndex = 7; break; }
-                case ".xsl": { cbType.SelectedIndex = 8; break; }
-                case ".ico": { cbType.SelectedIndex = 9; break; }
-                default: { cbType.SelectedIndex = -1; break; }
-            }
-            
+            var items = new[] {
+                 new WebResourceType(0 , "Webpage (HTML)", "htm", "html"),
+                 new WebResourceType(1, "Stylesheet (CSS)", "css"),
+                 new WebResourceType(2, "Script (JScript)", "js"),
+                 new WebResourceType(3, "Data (XML)", "xml"),
+                 new WebResourceType(4, "Image (PNG)", "png"),
+                 new WebResourceType(5, "Image (JPG)", "jpg", "jpeg"),
+                 new WebResourceType(6, "Image (GIF)", "gif"),
+                 new WebResourceType(7, "Silverlight (XAP)", "xap"),
+                 new WebResourceType(8, "Stylesheet (XSL)", "xsl"),
+                 new WebResourceType(9, "Image (ICO)", "ico")
+            };
+            cbType.Items.AddRange(items);
+            cbType.SelectedItem = items.FirstOrDefault(i => i.Extensions.Contains(extension, StringComparer.OrdinalIgnoreCase));
         }
     }
 }

@@ -1,15 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="MicrosoftDynamicsCrmWebResourcesUpdater - 0.5.3" Version="0.5.35.8" Language="en-US" Publisher="Marat Deykun &amp; Angel A. Rodriguez" />
-        <DisplayName>Microsoft Dynamics CRM Web Resources Updater</DisplayName>
-        <Description xml:space="preserve">Microsoft Dynamics CRM Web Resources Updater gives you an easy way to update and publish web resources directly from Visual Studio. Add-on updates only web resources that are differ. So it takes as little time as possible to publish web resources. You can configure add-on to automatically publish just updated web resources.</Description>
+        <Identity Id="CrmPublisher - 0.5.4" Version="0.5.40.0" Language="en-US" Publisher="CSharpAngels" />
+        <DisplayName>CrmPublisher</DisplayName>
+        <Description xml:space="preserve">Microsoft Dynamics CRM Web Resources Updater gives you an easy way to update and publish web resources directly from Visual Studio. Add-on updates only web resources that are differ. So it takes as little time as possible to publish web resources. You can configure add-on to automatically publish just updated web resources.
+
+Source Code: https://github.com/AngelRodriguez8008/CrmUpdater
+Original Post: http://happycrm.blogspot.ru/p/crm-publisher.html</Description>
         <MoreInfo>http://happycrm.blogspot.ru/p/crm-publisher.html</MoreInfo>
         <License>Resources\license.txt</License>
         <GettingStartedGuide>Resources\ReadMe.docx</GettingStartedGuide>
+        <ReleaseNotes>Created by Marat Deykun, remastered by Angel A. Rodriguez</ReleaseNotes>
         <Icon>Resources\UpdaterLogo.png</Icon>
         <PreviewImage>Resources\MenuItems.png</PreviewImage>
-        <Tags>Microsoft Dynamics CRM, Web Resources, Web Resource, Publish, Publishing, Update, Updating</Tags>
+        <Tags>Microsoft Dynamics 365, CRM, Web Resources, Web Resource, Publish, Publishing, Update, Updating</Tags>
     </Metadata>
     <Installation>
         <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[14.0,)" />
@@ -25,4 +29,8 @@
     <Prerequisites>
         <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[15.8.27729.1,17.0)" DisplayName="Visual Studio core editor" />
     </Prerequisites>
+    <References>
+        <Reference Include="Microsoft.Xrm.Tooling.Ui.Styles, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
+    </References>
 </PackageManifest>
+

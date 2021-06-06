@@ -6,8 +6,8 @@
 using System;
 using System.IO;
 using System.Linq;
-using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
+using CrmWebResourcesUpdater.Helpers;
 
 namespace CrmWebResourcesUpdater
 {

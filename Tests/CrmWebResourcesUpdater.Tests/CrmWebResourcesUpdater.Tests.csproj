@@ -55,9 +55,9 @@
     <Compile Include="VersionsHelper_Tests.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CrmWebResourcesUpdater\CrmWebResourcesUpdater.csproj">
-      <Project>{d903d192-561e-49a4-91f4-e900ab626941}</Project>
-      <Name>CrmWebResourcesUpdater</Name>
+    <ProjectReference Include="..\..\CrmWebResourcesUpdater.Helpers\CrmWebResourcesUpdater.Helpers.csproj">
+      <Project>{8433c7d4-9ab0-47da-8314-f39d02656c22}</Project>
+      <Name>CrmWebResourcesUpdater.Helpers</Name>
     </ProjectReference>
   </ItemGroup>
   <Choose>

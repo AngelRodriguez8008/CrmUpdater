@@ -2,7 +2,6 @@
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
@@ -13,9 +12,10 @@ namespace CrmWebResourcesUpdater.Helpers
 {
     public static class ProjectHelper
     {
+        public const string FileKindGuid =         "{6BB5F8EE-4483-11D3-8BCF-00C04F8EC28C}";
+        public const string ProjectKindGuid =      "{6BB5F8EE-4483-11D3-8BCF-00C04F8EC28C}";
 
         private static IServiceProvider _serviceProvider;
-        private static Dictionary<Guid, Settings> _settingsCache = new Dictionary<Guid, Settings>();
 
         public static string GetProjectRoot(Project project)
         {
@@ -48,19 +48,39 @@ namespace CrmWebResourcesUpdater.Helpers
         /// Gets Publisher settings for selected project
         /// </summary>
         /// <returns>Returns settings for selected project</returns>
-        public static Settings GetSettings()
+        public static T GetSettings<T>()
         {
             var project = GetSelectedProject();
             var guid = GetProjectGuid(project);
-            if (_settingsCache.ContainsKey(guid))
-            {
-                return _settingsCache[guid];
-            }
-            var settings = new Settings(_serviceProvider, guid);
-            _settingsCache.Add(guid, settings);
+            
+            var cache = SettingsManager<T>.Cache;
+            var success = cache.TryGetValue(guid, out T settings);
+            if (success)
+                return settings;
+
+            var manager = new SettingsManager<T>(_serviceProvider, guid);
+            settings = manager.GetSettings();
+            if (settings != null)
+                cache.Add(guid, settings);
+
             return settings;
         }
         
+        /// <summary>
+        /// Gets Publisher settings for selected project
+        /// </summary>
+        /// <returns>Returns settings for selected project</returns>
+        public static void SaveSettings<T>(T settings)
+        {
+            var project = GetSelectedProject();
+            var guid = GetProjectGuid(project);
+            
+            var cache = SettingsManager<T>.Cache;
+            cache[guid] = settings;
+
+            var manager = new SettingsManager<T>(_serviceProvider, guid);
+            manager.Save(settings);
+        }
 
         /// <summary>
         /// Shows Configuration Error Dialog
@@ -82,19 +102,18 @@ namespace CrmWebResourcesUpdater.Helpers
         /// <returns>Returns project guid</returns>
         private static Guid GetProjectGuid(Project project)
         {
-            Guid projectGuid = Guid.Empty;
-            IVsHierarchy hierarchy;
-
             var solution = _serviceProvider.GetService(typeof(SVsSolution)) as IVsSolution;
-            solution.GetProjectOfUniqueName(project.FullName, out hierarchy);
-            if (hierarchy != null)
-            {
-                solution.GetGuidOfProject(hierarchy, out projectGuid);
-            }
+            if(solution == null)
+                return Guid.Empty;
+            
+            solution.GetProjectOfUniqueName(project.FullName, out var hierarchy);
+            if (hierarchy == null)
+                return Guid.Empty;
+
+            solution.GetGuidOfProject(hierarchy, out var projectGuid);
             return projectGuid;
         }
-
-
+        
 
         /// <summary>
         /// Gets selected project
@@ -108,23 +127,22 @@ namespace CrmWebResourcesUpdater.Helpers
                 throw new Exception("Failed to get DTE service.");
             }
             UIHierarchyItem uiHierarchyItem = ((object[])dte.ToolWindows.SolutionExplorer.SelectedItems).OfType<UIHierarchyItem>().FirstOrDefault();
-            var project = uiHierarchyItem.Object as Project;
+            var project = uiHierarchyItem?.Object as Project;
             if (project == null)
             {
-                var item = uiHierarchyItem.Object as ProjectItem;
-                project = item.ContainingProject;
+                var item = uiHierarchyItem?.Object as ProjectItem;
+                project = item?.ContainingProject;
             }
             return project;
         }
-
         
-
         public static void SetStatusBar(string message, object icon = null)
         {
             var statusBar = _serviceProvider.GetService(typeof(SVsStatusbar)) as IVsStatusbar;
+            if(statusBar == null)
+                return;
 
-            int frozen;
-            statusBar.IsFrozen(out frozen);
+            statusBar.IsFrozen(out int frozen);
             if (frozen == 0)
             {
                 //object icon = (short)Microsoft.VisualStudio.Shell.Interop.Constants.SBAI_Deploy;
@@ -173,7 +191,8 @@ namespace CrmWebResourcesUpdater.Helpers
                 throw new Exception("Failed to get DTE service.");
             }
 
-            var uiHierarchyItems = Enumerable.OfType<UIHierarchyItem>((IEnumerable)(object[])dte.ToolWindows.SolutionExplorer.SelectedItems);
+            var selectedItems = (object[])dte.ToolWindows.SolutionExplorer.SelectedItems;
+            var uiHierarchyItems = selectedItems.OfType<UIHierarchyItem>();
             var items = new List<ProjectItem>();
             foreach (var uiItem in uiHierarchyItems)
             {
@@ -196,10 +215,11 @@ namespace CrmWebResourcesUpdater.Helpers
             var files = new List<string>();
             foreach (ProjectItem item in list)
             {
-                if (item.Kind.ToLower() == Settings.FileKindGuid.ToLower())
+                if (item.Kind.ToLower() == FileKindGuid.ToLower())
                 {
-                    var path = Path.GetDirectoryName(item.FileNames[0]).ToLower();
-                    var fileName = Path.GetFileName(item.FileNames[0]);
+                    var itemFileName = item.FileNames[0];
+                    var path = Path.GetDirectoryName(itemFileName)?.ToLower();
+                    var fileName = Path.GetFileName(itemFileName);
                     files.Add(path + "\\" + fileName);
                 }
 

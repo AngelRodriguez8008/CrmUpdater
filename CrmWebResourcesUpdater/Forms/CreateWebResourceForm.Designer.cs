@@ -121,25 +121,24 @@
             // bCreate
             // 
             this.bCreate.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.bCreate.Location = new System.Drawing.Point(320, 170);
+            this.bCreate.Location = new System.Drawing.Point(238, 171);
             this.bCreate.Name = "bCreate";
             this.bCreate.Size = new System.Drawing.Size(75, 23);
             this.bCreate.TabIndex = 3;
             this.bCreate.Text = "Create";
             this.bCreate.UseVisualStyleBackColor = true;
-            this.bCreate.Click += new System.EventHandler(this.bCreateClick);
+            this.bCreate.Click += new System.EventHandler(this.bCreate_Click);
             // 
             // bCancel
             // 
             this.bCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.bCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.bCancel.Location = new System.Drawing.Point(239, 170);
+            this.bCancel.Location = new System.Drawing.Point(319, 171);
             this.bCancel.Name = "bCancel";
             this.bCancel.Size = new System.Drawing.Size(75, 23);
             this.bCancel.TabIndex = 3;
             this.bCancel.Text = "Cancel";
             this.bCancel.UseVisualStyleBackColor = true;
-            this.bCancel.Click += new System.EventHandler(this.bCancelClick);
             // 
             // tbPrefix
             // 

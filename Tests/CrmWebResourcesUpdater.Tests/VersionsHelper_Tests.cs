@@ -1,4 +1,5 @@
 ﻿using System;
+using CrmWebResourcesUpdater.Helpers;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CrmWebResourcesUpdater.Tests

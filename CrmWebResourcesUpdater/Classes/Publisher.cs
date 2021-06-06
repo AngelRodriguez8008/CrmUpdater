@@ -3,16 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using McTools.Xrm.Connection;
-using EnvDTE;
 using Microsoft.Xrm.Sdk.Query;
-using System.Threading.Tasks;
 using CrmWebResourcesUpdater.Forms;
 using System.Windows.Forms;
-using System.ComponentModel;
 using CrmWebResourcesUpdater.Common;
 using CrmWebResourcesUpdater.Helpers;
-using McTools.Xrm.Connection.WinForms;
+using CrmWebResourcesUpdater.OptionsForms;
 using Microsoft.Crm.Sdk.Messages;
 
 namespace CrmWebResourcesUpdater
@@ -35,166 +31,129 @@ namespace CrmWebResourcesUpdater
                     </fetch>";
 
 
-        private readonly ConnectionDetail _connectionDetail;
-        private readonly bool _autoPublish;
-        private readonly bool _ignoreExtensions;
-        private readonly bool _uploadSelectedItems;
-        private readonly bool _extendedLog;
+        private Settings _settings;
+        private Settings Settings => _settings ?? (_settings = GetSettings());
 
-        private readonly IOrganizationService _orgService;
+        private Settings GetSettings()
+        {
+            var result = ProjectHelper.GetSettings<Settings>();
 
-        /// <summary>
-        /// Publisher constructor
-        /// </summary>
-        /// <param name="connection">Connection to CRM that will be used to upload webresources</param>
-        /// <param name="uploadSelectedItems">Items to upload</param>
-        /// <param name="autoPublish">Perform publishing or not</param>
-        /// <param name="ignoreExtensions">Try to upload without extension if item not found with it</param>
-        /// <param name="extendedLog">Print extended uploading process information</param>
-        public Publisher(ConnectionDetail connection, bool uploadSelectedItems, bool autoPublish, bool ignoreExtensions, bool extendedLog = false) : this(connection, autoPublish, ignoreExtensions, extendedLog)
-        {
-            _uploadSelectedItems = uploadSelectedItems;
-        }
-        /*
-        /// <summary>
-        /// Publisher constructor
-        /// </summary>
-        /// <param name="connection">Connection to CRM that will be used to upload webresources</param>
-        /// <param name="project">Project to upload files from</param>
-        /// <param name="autoPublish">Perform publishing or not</param>
-        /// <param name="ignoreExtensions">Try to upload without extension if item not found with it</param>
-        /// <param name="extendedLog">Print extended uploading process information</param>
-        public Publisher(ConnectionDetail connection, Project project, bool autoPublish, bool ignoreExtensions, bool extendedLog = false): this(connection, autoPublish, ignoreExtensions, extendedLog)
-        {
-            if(project == null)
-            {
-                throw new ArgumentNullException("project");
-            }
-            _project = project;
-            _projectRootPath = Path.GetDirectoryName(_project.FullName);
-        }
-        */
-        /// <summary>
-        /// Publisher constructor
-        /// </summary>
-        /// <param name="connection">Connection to CRM that will be used to upload webresources</param>
-        /// <param name="autoPublish">Perform publishing or not</param>
-        /// <param name="ignoreExtensions">Try to upload without extension if item not found with it</param>
-        /// <param name="extendedLog">Print extended uploading process information</param>
-        private Publisher(ConnectionDetail connection, bool autoPublish, bool ignoreExtensions, bool extendedLog)
-        {
-            _connectionDetail = connection ?? throw new ArgumentNullException(nameof(connection));
-            _autoPublish = autoPublish;
-            _ignoreExtensions = ignoreExtensions;
-            _extendedLog = extendedLog;
-            _orgService = CrmConnectionHelper.GetOrganizationServiceProxy(_connectionDetail);
-        }
+            if (result?.Connection != null)
+                return result;
 
-        /// <summary>
-        /// Reads files from project and starts Publish process asynchronously using selected connection
-        /// </summary>
-        public void PublishWebResourcesAsync()
-        {
-            Task.Run(() => PublishWebResources());
+            if (ProjectHelper.ShowErrorDialog() == DialogResult.Yes)
+                result = ShowConfigurationDialog(result);
+
+            return result;
         }
 
         /// <summary>
         /// Uploads and publishes files to CRM
         /// </summary>
-        public void PublishWebResources()
+        public void PublishWebResources(bool uploadSelectedItems = false)
         {
             ProjectHelper.SaveAll();
             Logger.Clear();
-            ProjectHelper.SetStatusBar("Uploading...");
-            Logger.WriteLineWithTime(_autoPublish ? "Publishing web resources..." : "Uploading web resources...");
 
-            Logger.WriteLine("Connecting to CRM...");
-            Logger.WriteLine("URL: " + _connectionDetail.WebApplicationUrl);
-            Logger.WriteLine("Solution Name: " + _connectionDetail.SolutionFriendlyName);
-            Logger.WriteLine("--------------------------------------------------------------");
-
-            Logger.WriteLine("Loading files paths", _extendedLog);
-            var projectFiles = GetSelectedFiles();
-
-
-            if (projectFiles == null || projectFiles.Count == 0)
+            Settings settings = this.Settings;
+            if (settings?.Connection == null)
             {
-                Logger.WriteLine("Failed to load files paths", _extendedLog);
+                Logger.WriteLine("Error: Connection is not selected");
+                return;
+            }
+            
+            if (settings.Solution?.SolutionId == null)
+            {
+                Logger.WriteLine("Error: Solution is not selected");
                 return;
             }
 
-            Logger.WriteLine(projectFiles.Count + " path" + (projectFiles.Count == 1 ? " was" : "s were") + " loaded", _extendedLog);
+            ProjectHelper.SetStatusBar("Uploading...");
+            Logger.WriteLineWithTime(settings.AutoPublish ? "Publishing web resources..." : "Uploading web resources...");
 
+            Logger.WriteLine("Connecting to CRM...");
+            Logger.WriteLine("URL: " + settings.Connection.WebApplicationUrl);
+            Logger.WriteLine("Solution Name: " + settings.Solution.FriendlyName);
+            Logger.WriteLine("--------------------------------------------------------------");
+
+            Logger.WriteLine("Loading files paths", settings.ExtendedLog);
+            var projectFiles = GetSelectedFiles(uploadSelectedItems);
+            
+            if (projectFiles == null || projectFiles.Count == 0)
+            {
+                Logger.WriteLine("Failed to load files paths", settings.ExtendedLog);
+                return;
+            }
+
+            Logger.WriteLine(projectFiles.Count + " path" + (projectFiles.Count == 1 ? " was" : "s were") + " loaded", settings.ExtendedLog);
+
+            Execute(settings, service => TryPublishWebResources(service, projectFiles));
+        }
+
+        private void TryPublishWebResources( IOrganizationService service, List<string> projectFiles)
+        {
             try
             {
-                Logger.WriteLine("Starting uploading process", _extendedLog);
-                var webresources = UploadWebResources(projectFiles);
-                Logger.WriteLine("Uploading process was finished", _extendedLog);
+                Logger.WriteLine("Starting uploading process", Settings.ExtendedLog);
+                var webresources = UploadWebResources(service, projectFiles);
+                Logger.WriteLine("Uploading process was finished", Settings.ExtendedLog);
 
                 if (webresources.Count > 0)
                 {
                     Logger.WriteLine("--------------------------------------------------------------");
                     foreach (var name in webresources.Values)
-                    {
                         Logger.WriteLine(name + " successfully uploaded");
-                    }
 
                     Logger.WriteLine("Updating Solution Version ...");
-                    var solutionVersion = VersionsHelper.UpdateSolution(_orgService, _connectionDetail.SolutionId);
+                    var solutionVersion = VersionsHelper.UpdateSolution(service, Settings.Solution.SolutionId);
                     Logger.WriteLine($"New Solution Version: {solutionVersion} ");
                 }
+
                 Logger.WriteLine("--------------------------------------------------------------");
-                Logger.WriteLineWithTime(webresources.Count + " file" + (webresources.Count == 1 ? " was" : "s were") + " uploaded");
+                var message = webresources.Count + " file" + (webresources.Count == 1 ? " was" : "s were");
+                Logger.WriteLineWithTime(message + " uploaded");
 
 
-                if (_autoPublish)
+                if (Settings.AutoPublish)
                 {
                     ProjectHelper.SetStatusBar("Publishing...");
-                    PublishWebResources(webresources.Keys);
-                }
+                    PublishWebResources(service, webresources.Keys);
 
-                if (_autoPublish)
-                {
-                    ProjectHelper.SetStatusBar(webresources.Count + " web resource" + (webresources.Count == 1 ? " was" : "s were") + " published");
+                    ProjectHelper.SetStatusBar(message + " published");
                 }
                 else
                 {
-                    ProjectHelper.SetStatusBar(webresources.Count + " web resource" + (webresources.Count == 1 ? " was" : "s were") + " uploaded");
+                    ProjectHelper.SetStatusBar(message + " uploaded");
                 }
-
             }
             catch (Exception ex)
             {
                 ProjectHelper.SetStatusBar("Failed to publish script" + (projectFiles.Count == 1 ? "" : "s"));
                 Logger.WriteLine("Failed to publish script" + (projectFiles.Count == 1 ? "." : "s."));
                 Logger.WriteLine(ex.Message);
-                Logger.WriteLine(ex.StackTrace, _extendedLog);
+                Logger.WriteLine(ex.StackTrace, Settings.ExtendedLog);
             }
+
             Logger.WriteLineWithTime("Done.");
         }
 
 
-
-        /// <summary>
-        /// Dispose object
-        /// </summary>
         public void Dispose()
         {
-
+            _settings?.Connection?.ServiceClient?.Dispose();
         }
 
-
-        public List<string> GetSelectedFiles()
+        public List<string> GetSelectedFiles(bool uploadSelectedItems = false)
         {
             List<string> projectFiles;
-            if (_uploadSelectedItems)
+            if (uploadSelectedItems)
             {
-                Logger.WriteLine("Loading selected files' paths", _extendedLog);
+                Logger.WriteLine("Loading selected file's paths", Settings.ExtendedLog);
                 projectFiles = ProjectHelper.GetSelectedFiles();
             }
             else
             {
-                Logger.WriteLine("Loading all files' paths", _extendedLog);
+                Logger.WriteLine("Loading all files' paths", Settings.ExtendedLog);
                 projectFiles = ProjectHelper.GetProjectFiles();
             }
 
@@ -204,39 +163,29 @@ namespace CrmWebResourcesUpdater
         /// <summary>
         /// Uploads web resources
         /// </summary>
-        /// <returns>List of guids of web resources that was updated</returns>
-        private Dictionary<Guid, string> UploadWebResources()
+        /// <param name="service">Organization Service Client</param>
+        /// <param name="projectFiles"></param>
+        /// <returns>List of Guids of web resources that was updateds</returns>            
+        private Dictionary<Guid, string> UploadWebResources( IOrganizationService service, List<string> projectFiles = null)
         {
-            var projectFiles = GetSelectedFiles();
-
+            projectFiles = projectFiles ?? GetSelectedFiles();
             if (projectFiles == null || projectFiles.Count == 0)
             {
                 return null;
             }
 
-            return UploadWebResources(projectFiles);
-        }
-
-        /// <summary>
-        /// Uploads web resources
-        /// </summary>
-        /// <param name="projectFiles"></param>
-        /// <returns>List of guids of web resources that was updateds</returns>            
-        private Dictionary<Guid, string> UploadWebResources(List<string> projectFiles)
-        {
             var ids = new Dictionary<Guid, string>();
-
             var project = ProjectHelper.GetSelectedProject();
             var projectRootPath = ProjectHelper.GetProjectRoot(project);
             var mappings = MappingHelper.LoadMappings(project);
-            var webResources = RetrieveWebResources();
+            var webResources = RetrieveWebResources(service);
 
             foreach (var filePath in projectFiles)
             {
                 var webResourceName = Path.GetFileName(filePath);
                 var lowerFilePath = filePath.ToLower();
 
-                if (string.Equals(webResourceName, Settings.MappingFileName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(webResourceName, MappingHelper.MappingFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -245,21 +194,21 @@ namespace CrmWebResourcesUpdater
                 {
                     webResourceName = mappings[lowerFilePath];
                     var relativePath = lowerFilePath.Replace(projectRootPath + "\\", "");
-                    Logger.WriteLine("Mapping found: " + relativePath + " to " + webResourceName, _extendedLog);
+                    Logger.WriteLine("Mapping found: " + relativePath + " to " + webResourceName, Settings.ExtendedLog);
                 }
 
                 var webResource = webResources.FirstOrDefault(x => x.GetAttributeValue<string>("name") == webResourceName);
-                if (webResource == null && _ignoreExtensions)
+                if (webResource == null && Settings.IgnoreExtensions)
                 {
-                    Logger.WriteLine(webResourceName + " does not exists in selected solution", _extendedLog);
+                    Logger.WriteLine(webResourceName + " does not exists in selected solution", Settings.ExtendedLog);
                     webResourceName = Path.GetFileNameWithoutExtension(filePath);
-                    Logger.WriteLine("Searching for " + webResourceName, _extendedLog);
+                    Logger.WriteLine("Searching for " + webResourceName, Settings.ExtendedLog);
                     webResource = webResources.FirstOrDefault(x => x.GetAttributeValue<string>("name") == webResourceName);
                 }
                 if (webResource == null)
                 {
-                    Logger.WriteLine("Uploading of " + webResourceName + " was skipped: web resource does not exists in selected solution", _extendedLog);
-                    Logger.WriteLine(webResourceName + " does not exists in selected solution", !_extendedLog);
+                    Logger.WriteLine("Uploading of " + webResourceName + " was skipped: web resource does not exists in selected solution", Settings.ExtendedLog);
+                    Logger.WriteLine(webResourceName + " does not exists in selected solution", !Settings.ExtendedLog);
                     continue;
                 }
                 if (!File.Exists(lowerFilePath))
@@ -267,7 +216,7 @@ namespace CrmWebResourcesUpdater
                     Logger.WriteLine("Warning: File not found: " + lowerFilePath);
                     continue;
                 }
-                var isUpdated = UpdateWebResourceByFile(webResource, filePath);
+                var isUpdated = UpdateWebResourceByFile(service, webResource, filePath);
                 if (isUpdated)
                 {
                     ids.Add(webResource.Id, webResourceName);
@@ -277,17 +226,17 @@ namespace CrmWebResourcesUpdater
         }
 
 
-
         /// <summary>
         /// Uploads web resource
         /// </summary>
+        /// <param name="service"></param>
         /// <param name="webResource">Web resource to be updated</param>
         /// <param name="filePath">File with a content to be set for web resource</param>
         /// <returns>Returns true if web resource is updated</returns>
-        private bool UpdateWebResourceByFile(Entity webResource, string filePath)
+        private bool UpdateWebResourceByFile(IOrganizationService service, Entity webResource, string filePath)
         {
             var webResourceName = Path.GetFileName(filePath);
-            Logger.WriteLine("Uploading " + webResourceName, _extendedLog);
+            Logger.WriteLine("Uploading " + webResourceName, Settings.ExtendedLog);
 
             var project = ProjectHelper.GetSelectedProject();
             var projectRootPath = ProjectHelper.GetProjectRoot(project);
@@ -298,8 +247,8 @@ namespace CrmWebResourcesUpdater
             var hasContentChanged = remoteContent.Length != localContent.Length || remoteContent != localContent;
             if (hasContentChanged == false)
             {
-                Logger.WriteLine("Uploading of " + webResourceName + " was skipped: there aren't any change in the web resource", _extendedLog);
-                Logger.WriteLine(webResourceName + " has no changes", !_extendedLog);
+                Logger.WriteLine("Uploading of " + webResourceName + " was skipped: there aren't any change in the web resource", Settings.ExtendedLog);
+                Logger.WriteLine(webResourceName + " has no changes", !Settings.ExtendedLog);
                 return false;
             }
 
@@ -311,37 +260,41 @@ namespace CrmWebResourcesUpdater
             }
             else
                 version = string.Empty;
-            
-            UpdateWebResourceByContent(webResource, localContent);
+
+            UpdateWebResourceByContent(service, webResource, localContent);
             var relativePath = filePath.Replace(projectRootPath + "\\", "");
             webResourceName = webResource.GetAttributeValue<string>("name");
-            Logger.WriteLine($"{webResourceName} uploaded from {relativePath}{version}", !_extendedLog);
+            Logger.WriteLine($"{webResourceName} uploaded from {relativePath}{version}", !Settings.ExtendedLog);
             return true;
         }
 
         /// <summary>
         /// Uploads web resource
         /// </summary>
+        /// <param name="service">Organization Service Client</param>
         /// <param name="webResource">Web resource to be updated</param>
         /// <param name="content">Content to be set for web resource</param>
-        private void UpdateWebResourceByContent(Entity webResource, string content)
+        private void UpdateWebResourceByContent(IOrganizationService service, Entity webResource, string content)
         {
             var name = webResource.GetAttributeValue<string>("name");
             webResource["content"] = content;
-            _orgService.Update(webResource);
+            service.Update(webResource);
 
-            Logger.WriteLine(name + " was successfully uploaded", _extendedLog);
+            Logger.WriteLine(name + " was successfully uploaded", Settings.ExtendedLog);
         }
 
         /// <summary>
         /// Retrieves web resources for selected items
         /// </summary>
         /// <returns>List of web resources</returns>
-        private List<Entity> RetrieveWebResources()
+        private List<Entity> RetrieveWebResources(IOrganizationService service)
         {
-            Logger.WriteLine("Retrieving existing web resources", _extendedLog);
-            var fetchQuery = string.Format(FetchWebResourcesQueryTemplate, _connectionDetail.SolutionId);
-            var response = _orgService.RetrieveMultiple(new FetchExpression(fetchQuery));
+            Logger.WriteLine("Retrieving existing web resources", Settings.ExtendedLog);
+            var solutionId = Settings.Solution.SolutionId;
+
+            var fetchQuery = string.Format(FetchWebResourcesQueryTemplate, solutionId);
+            var query = new FetchExpression(fetchQuery);
+            var response = service.RetrieveMultiple(query);
             var webResources = response.Entities.ToList();
 
             return webResources;
@@ -350,8 +303,9 @@ namespace CrmWebResourcesUpdater
         /// <summary>
         /// Publish webresources changes
         /// </summary>
+        /// <param name="service">Organization Service Client</param>
         /// <param name="webresourcesIds">List of webresource IDs to publish</param>
-        private void PublishWebResources(IEnumerable<Guid> webresourcesIds)
+        private void PublishWebResources( IOrganizationService service, IEnumerable<Guid> webresourcesIds)
         {
             Logger.WriteLineWithTime("Publishing...");
             if (webresourcesIds == null)
@@ -363,7 +317,7 @@ namespace CrmWebResourcesUpdater
             if (webresourcesIdsArr.Any())
             {
                 var request = GetPublishRequest(webresourcesIdsArr);
-                _orgService.Execute(request);
+                service.Execute(request);
             }
             var count = webresourcesIdsArr.Length;
             Logger.WriteLineWithTime(count + " file" + (count == 1 ? " was" : "s were") + " published");
@@ -393,110 +347,125 @@ namespace CrmWebResourcesUpdater
             return request;
         }
 
-
         public void CreateWebResource()
         {
-            string publisherPrefix = _connectionDetail.PublisherPrefix;
-            if (publisherPrefix == null)
+            var settings = this.Settings;
+            if (settings?.Connection == null)
             {
-                var result = MessageBox.Show("Publisher prefix is not loaded. Do you want to load it from CRM?", "Prefix is missing", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
-                {
-                    LoadPrefix();
-                }
+                Logger.WriteLine("Error: Connection is not selected");
+                return;
             }
-
-            OpenCreateWebResourceForm();
+            
+            if (settings.Solution?.SolutionId == null)
+            {
+                Logger.WriteLine("Error: Solution is not selected");
+                return;
+            }
+            Execute(settings, OpenCreateWebResourceForm, "An error occurred while creating WebResource");
         }
 
-
-        private void OpenCreateWebResourceForm()
+        private void OpenCreateWebResourceForm(IOrganizationService service)
         {
+            string publisherPrefix = Settings.Solution.PublisherPrefix;
+            if (publisherPrefix == null)
+            {
+                var result = MessageBox.Show(
+                    "Publisher prefix is not loaded. Do you want to load it from CRM?",
+                    "Prefix is missing",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (result != DialogResult.Yes)
+                    return;
+
+                LoadPrefix(service);
+            }
+
             var path = ProjectHelper.GetSelectedFilePath();
-            var dialog = new CreateWebResourceForm(path);
+            var dialog = new CreateWebResourceForm(service, path){
+                StartPosition = FormStartPosition.CenterParent
+            };
             dialog.ShowDialog();
         }
 
-        private void LoadPrefix()
+        private void LoadPrefix(IOrganizationService service)
         {
+            var settings = Settings;
+            var solutionId = settings.Solution?.SolutionId;
+            if (solutionId == null)
+                return;
+
             Logger.WriteLine("Retrieving Publisher prefix");
-            var bwSolution = new BackgroundWorker();
-            bwSolution.DoWork += BwGetSolutionDoWork;
-            bwSolution.RunWorkerCompleted += BwGetSolutionRunWorkerCompleted;
-            bwSolution.RunWorkerAsync();
-        }
+            var entity = service.GetSolution(solutionId.Value);
 
-        private void BwGetSolutionRunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            if (e.Error != null)
-            {
-                string errorMessage = e.Error.Message;
-                var ex = e.Error.InnerException;
-                while (ex != null)
-                {
-                    errorMessage += "\r\nInner Exception: " + ex.Message;
-                    ex = ex.InnerException;
-                }
-                MessageBox.Show("An error occured while retrieving publisher prefix: " + errorMessage, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            else
-            {
-                if (e.Result != null)
-                {
-                    var entity = e.Result as Entity;
-                    string prefix = entity?.GetAttributeValue<AliasedValue>("publisher.customizationprefix")?.Value.ToString();
-                    Logger.WriteLine("Publisher prefix successfully retrieved");
-                    _connectionDetail.PublisherPrefix = prefix;
-                    var settings = ProjectHelper.GetSettings();
-                    settings.SelectedConnection.PublisherPrefix = prefix;
-                    settings.Save();
-                    OpenCreateWebResourceForm();
-                }
-            }
-        }
+            if (entity == null)
+                return;
 
-        private void BwGetSolutionDoWork(object sender, DoWorkEventArgs e)
-        {
-            e.Result = RetrieveSolution();
-        }
+            string prefix = entity.GetAttributeValue<AliasedValue>("publisher.customizationprefix")?.Value.ToString();
+            Logger.WriteLine("Publisher prefix successfully retrieved");
 
-        private Entity RetrieveSolution()
-        {
-            if (_connectionDetail.SolutionId == null)
-            {
-                return null;
-            }
-
-            var result = _orgService.GetSolution(_connectionDetail.SolutionId.Value);
-            return result;
+            settings.Solution.PublisherPrefix = prefix;
+            ProjectHelper.SaveSettings(settings);
         }
+        
+        static WebResourcesUpdaterForm optionsForm;
 
         /// <summary>
         /// Shows Configuration Dialog
         /// </summary>
-        /// <param name="mode">Configuration mode for settings dialog</param>
-        /// <param name="project">Project to manage configuration for</param>
+        /// <param name="settings"></param>
         /// <returns>Returns result of a configuration dialog</returns>
-        public static DialogResult ShowConfigurationDialog(ConfigurationMode mode, Project project)
+        public Settings ShowConfigurationDialog(Settings settings = null)
         {
-            var settings = ProjectHelper.GetSettings();
-            var crmConnections = settings.CrmConnections ?? new CrmConnections { Connections = new List<ConnectionDetail>() };
-            var manager = new ConnectionManager
+            if (optionsForm == null)
+                optionsForm = new WebResourcesUpdaterForm {StartPosition = FormStartPosition.CenterParent};
+
+            if (settings == null)
+                settings = ProjectHelper.GetSettings<Settings>();
+
+            if (settings != null)
+                optionsForm.Init(settings);
+            else
+                settings = new Settings();
+
+            optionsForm.ShowDialog();
+
+            if (optionsForm.DialogResult == DialogResult.OK)
             {
-                ConnectionsList = crmConnections
-            };
-            var selector = new ConnectionSelector(crmConnections, manager, settings.SelectedConnection, false, mode == ConfigurationMode.Update)
-            {
-                WorkingProject = project
-            };
-            selector.ShowDialog();
-            settings.CrmConnections = selector.ConnectionList;
-            if (selector.DialogResult == DialogResult.OK || selector.DialogResult == DialogResult.Yes)
-            {
-                settings.SelectedConnection = selector.SelectedConnection;
+                settings.Connection = optionsForm.SelectedConnection;
+                settings.Solution = optionsForm.SelectedSolution;
+                settings.AutoPublish = optionsForm.AutoPublish;
+                settings.IgnoreExtensions = optionsForm.IgnoreExtensions;
+                settings.ExtendedLog = optionsForm.ExtendedLog;
+
+                ProjectHelper.SaveSettings(settings);
             }
-            settings.Save();
-            return selector.DialogResult;
+            return settings;
+        }
+        
+        public void Execute(Settings settings, Action<IOrganizationService> serviceAction, string errorMessage = null)
+        {
+            try
+            {
+                if(optionsForm == null)
+                {
+                    Logger.WriteLine("Init Configuration Options Form");
+                    optionsForm = new WebResourcesUpdaterForm {
+                        StartPosition = FormStartPosition.CenterParent
+                    };
+                }
+                optionsForm.Init(settings);
+                optionsForm.ConnectAndExecute(serviceAction);
+            }
+            catch (Exception e)
+            {
+                LogError("Error executing service action", e);
+            }
+        }
+
+        private static void LogError(string message, Exception error = null)
+        {
+            var errorMessage = error?.GetErrorMessage();
+            Logger.WriteLine(string.Join(Environment.NewLine, message, errorMessage));
         }
     }
 }

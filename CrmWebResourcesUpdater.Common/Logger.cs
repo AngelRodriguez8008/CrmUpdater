@@ -27,9 +27,7 @@ namespace CrmWebResourcesUpdater.Common
         public static void WriteLine(string message, bool print = true)
         {
             if(print)
-            {
                 Write(message + "\r\n");
-            }
         }
 
         /// <summary>
